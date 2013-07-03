@@ -22,8 +22,8 @@
 
 #include "config.h"
 
-#define PAYLOAD_NIBBLES_ID  3 //!< FUTURE budget for ID in payload
-#define PAYLOAD_NIBBLES_OTP 7 //!< FUTURE budget for OTP in payload (NOTE: <= 8)
+#define PAYLOAD_NIBBLES_ID  3 //!< budget for ID in payload
+#define PAYLOAD_NIBBLES_OTP 7 //!< budget for OTP in payload (<= 8)
 
 #define COIL_PIN 3 //!< Pin used to drive the coil
 #define BIT_DELAY 128 //!< delay between each transistion in microseconds (Manchester encoding)
@@ -33,9 +33,8 @@ byte payload[40] = { 0 }; //!< data payload (D00-39) where D00-D03 is /not/ cons
 byte row_sums[10] = { 0 }; //!< row parity bits (P0-9)
 byte col_sums[4] = { 0 }; //!< column parity bits (PC0-3)
 
-// Pointers into payload
-byte *payload_id = payload;
-byte *payload_otp = payload + 4*PAYLOAD_NIBBLES_ID;
+byte *payload_id = payload; //!< payload offset for ID
+byte *payload_otp = payload + 4*PAYLOAD_NIBBLES_ID; //!< payload offset for OTP
 
 //!< Get count from EEPROM
 unsigned long count() {
@@ -53,20 +52,20 @@ void count(unsigned long c) {
   }
 }
 
-//!< Transmit a bit (Manchester Encoding)
+//!< Transmit a bit (Manchester Encoding, as per IEEE 802.3)
 void transmit_bit(byte data) {
   if (data & 0x01) {
-    // Transmit 1 (high->low)
-    digitalWrite(COIL_PIN, HIGH);
-    delayMicroseconds(BIT_DELAY);
+    // Transmit 1 (low->high)
     digitalWrite(COIL_PIN, LOW);
+    delayMicroseconds(BIT_DELAY);
+    digitalWrite(COIL_PIN, HIGH);
     delayMicroseconds(BIT_DELAY);
   }
   else {
     // Transmit 0 (low->high)
-    digitalWrite(COIL_PIN, LOW);
-    delayMicroseconds(BIT_DELAY);
     digitalWrite(COIL_PIN, HIGH);
+    delayMicroseconds(BIT_DELAY);
+    digitalWrite(COIL_PIN, LOW);
     delayMicroseconds(BIT_DELAY);
   }
 }
