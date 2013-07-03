@@ -20,20 +20,28 @@
 #include <EEPROM.h>
 #include <sha1.h>
 
+#include "config.h"
+
+// Customizations for security (Defaults OK)
+#define PAYLOAD_NIBBLES_ID  3
+#define PAYLOAD_NIBBLES_OTP 7
+//
+
 #define COIL_PIN 3 //!< Pin used to drive the coil
-
-#define PUBLIC_KEY "000"  //!< ID
-#define PRIVATE_KEY ""    //!< Long key with high entropy
-
-#define PUBLIC_KEY_ENCODED_LENGTH     3
-#define ONE_TIME_TOKEN_ENCODED_LENGTH 7
-
 #define BIT_DELAY 128 //!< delay between each transistion in microseconds (Manchester encoding)
 
-byte device_info[8] = { 0 }; //!< device info (D00-07)
-byte payload[32] = { 0 }; //!< data payload (D08-39)
+byte payload[40] = { 0 }; //!< data payload (D00-39) where D00-D03 is /not/ considered special
 byte row_sums[10] = { 0 }; //!< row parity bits (P0-9)
 byte col_sums[4] = { 0 }; //!< column parity bits (PC0-3)
+
+// Pointers into payload
+byte *payload_id = payload;
+byte *payload_otp = payload + 4*PAYLOAD_NIBBLES_ID;
+
+char nibble_to_hex(byte nibble) {
+  nibble &= 0x0F;
+  return (nibble < 0x0A) ? '0' + nibble : 'A' + (nibble - 0x0A);
+}
 
 //!< Get count from EEPROM
 unsigned long count() {
@@ -81,23 +89,6 @@ void transmit_header() {
   transmit_bit(1);
 }
 
-void transmit_device_info() {
-  // Send D00-03
-  transmit_bit(device_info[0]);
-  transmit_bit(device_info[1]);
-  transmit_bit(device_info[2]);
-  transmit_bit(device_info[3]);
-  // Send P0
-  transmit_bit(row_sums[0]);
-  // Send D04-07
-  transmit_bit(device_info[4]);
-  transmit_bit(device_info[5]);
-  transmit_bit(device_info[6]);
-  transmit_bit(device_info[7]);
-  // Send P1
-  transmit_bit(row_sums[1]);
-}
-
 void transmit_footer() {
   transmit_bit(col_sums[0]);
   transmit_bit(col_sums[1]);
@@ -109,7 +100,7 @@ void transmit_footer() {
 void transmit_payload() {
   byte *p = payload;
   
-  for(int row = 2; row < 12; row++) {
+  for(int row = 0; row < 10; row++) {
     // Send next nibble
     transmit_bit(*p++);
     transmit_bit(*p++);
@@ -122,38 +113,55 @@ void transmit_payload() {
 
 void transmit_all() {
   transmit_header();
-  transmit_device_info();
   transmit_payload();
   transmit_footer();
 }
 
+void set_payload_id(unsigned long id) {
+  // TODO - for each nibble in `id`, convert to hex and put in payload
+}
+
+void set_payload_otp(uint8_t *otp) {
+  // TODO - for each nibble in `otp`, convert to hex and put in payload
+}
+
 void calculate_row_sums() {
-  byte offset = 0;
-  for(int i = 0; i < 10; i++) {
-    offset += 4;
-    row_sums[i] = payload[offset] ^ payload[offset + 1] ^ payload[offset + 2] ^ payload[offset + 3];
+  // Take the sum of each nibble of payload (i.e. "row")
+  byte *row = payload;
+  for (short i = 0; i < 10; i++) {
+    row_sums[i] = row[0] ^ row[1] ^ row[2] ^ row[3];
+    row += 4;
   }
 }
 
 void calculate_col_sums() {
-  for(int i = 0; i < 4; i++) {
-    col_sums[i] = payload[i] ^ payload[i + 5] ^ payload[i + 10] ^ payload[i + 15]
-                 ^ payload[i + 20] ^ payload[i + 25] ^ payload[i + 30] ^ payload[i + 35]
-                 ^ payload[i + 40] ^ payload[i + 45];
+  // Take the sum of each bit in each nibble of payload (i.e. "col")
+  byte *p = payload;
+  for (short i = 0; i < 4; i++) {
+    col_sums[i] = p[0] ^ p[4] ^ p[8] ^ p[12] ^ p[16] ^ p[20] ^ p[24] ^ p[28] ^ p[32] ^ p[36];
+    p++;
   }
 }
 
 void setup() {
-  unsigned long c = count();
+  unsigned long c;
+  uint8_t *hash = NULL;
+
+  // Grab nonce (counter, time, etc.)
+  c = count();
 
   // Compute token
-  Sha1.initHmac((const uint8_t*) PRIVATE_KEY, 32);
-  Sha1.write(PUBLIC_KEY);
-  Sha1.write(c);
-  
-  // Truncate token
+  Sha1.initHmac((const uint8_t*) F(OTP_KEY), OTP_KEY_LENGTH);
+  Sha1.print(OTP_ID);
+  Sha1.print(c);
+  hash = Sha1.resultHmac();
+  hash += hash[HASH_LENGTH-1] & 0x0F; // NOTE: PAYLOAD_NIBBLES_OTP <= 8 for this to be OK
   
   // Prepare payload
+  set_payload_id(OTP_ID);
+  set_payload_otp(hash);
+  calculate_row_sums();
+  calculate_col_sums();
   
   // Update EEPROM
   count(++c);
