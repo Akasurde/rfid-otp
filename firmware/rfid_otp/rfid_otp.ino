@@ -23,7 +23,7 @@
 #include "config.h"
 
 #define PAYLOAD_NIBBLES_ID  3 //!< FUTURE budget for ID in payload
-#define PAYLOAD_NIBBLES_OTP 7 //!< FUTURE budget for  payload
+#define PAYLOAD_NIBBLES_OTP 7 //!< FUTURE budget for OTP in payload (NOTE: <= 8)
 
 #define COIL_PIN 3 //!< Pin used to drive the coil
 #define BIT_DELAY 128 //!< delay between each transistion in microseconds (Manchester encoding)
@@ -71,6 +71,7 @@ void transmit_bit(byte data) {
   }
 }
 
+//!< Transmit EM4100 header (9 high bits)
 void transmit_header() {
   transmit_bit(1);
   transmit_bit(1);
@@ -85,6 +86,7 @@ void transmit_header() {
   transmit_bit(1);
 }
 
+//!< Transmit EM4100 payload (40 bits)
 void transmit_payload() {
   byte *p = payload;
   
@@ -100,6 +102,7 @@ void transmit_payload() {
   }
 }
 
+//!< Transmit EM4100 footer (column sums and 0 end-bit)
 void transmit_footer() {
   transmit_bit(col_sums[0]);
   transmit_bit(col_sums[1]);
@@ -108,18 +111,23 @@ void transmit_footer() {
   transmit_bit(0);
 }
 
+//!< Transmit EM4100 token
 void transmit_all() {
   transmit_header();
   transmit_payload();
   transmit_footer();
 }
 
+//!< Set ID in payload (least-significant PAYLOAD_NIBBLES_ID nibbles of id)
 void set_payload_id(unsigned long id) {
+  byte *p = payload_id + (4*PAYLOAD_NIBBLES_ID-1);
   for (int i = 0; i < 4*PAYLOAD_NIBBLES_ID; i++) {
-    payload[i] = (id>>i) & 0x01;
+    *p = (id>>i) & 0x01;
+    p--;
   }
 }
 
+//!< Set OTP in payload (first PAYLOAD_NIBBLES_OTP nibbles of otp)
 void set_payload_otp(uint8_t *otp) {
   byte nib;
   byte *p = payload_otp;
@@ -168,7 +176,7 @@ void setup() {
   Sha1.print(OTP_ID);
   Sha1.print(c);
   hash = Sha1.resultHmac();
-  hash += hash[HASH_LENGTH-1] & 0x0F; // NOTE: PAYLOAD_NIBBLES_OTP <= 8 for this to be OK
+  hash += hash[HASH_LENGTH-1] & 0x0F;
   
   // Prepare payload
   set_payload_id(OTP_ID);
