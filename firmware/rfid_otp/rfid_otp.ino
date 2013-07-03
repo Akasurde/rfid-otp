@@ -22,14 +22,13 @@
 
 #include "config.h"
 
-// Customizations for security (Defaults OK)
-#define PAYLOAD_NIBBLES_ID  3
-#define PAYLOAD_NIBBLES_OTP 7
-//
+#define PAYLOAD_NIBBLES_ID  3 //!< FUTURE budget for ID in payload
+#define PAYLOAD_NIBBLES_OTP 7 //!< FUTURE budget for  payload
 
 #define COIL_PIN 3 //!< Pin used to drive the coil
 #define BIT_DELAY 128 //!< delay between each transistion in microseconds (Manchester encoding)
 
+// TODO store bits as bits, not bytes
 byte payload[40] = { 0 }; //!< data payload (D00-39) where D00-D03 is /not/ considered special
 byte row_sums[10] = { 0 }; //!< row parity bits (P0-9)
 byte col_sums[4] = { 0 }; //!< column parity bits (PC0-3)
@@ -37,11 +36,6 @@ byte col_sums[4] = { 0 }; //!< column parity bits (PC0-3)
 // Pointers into payload
 byte *payload_id = payload;
 byte *payload_otp = payload + 4*PAYLOAD_NIBBLES_ID;
-
-char nibble_to_hex(byte nibble) {
-  nibble &= 0x0F;
-  return (nibble < 0x0A) ? '0' + nibble : 'A' + (nibble - 0x0A);
-}
 
 //!< Get count from EEPROM
 unsigned long count() {
@@ -59,8 +53,8 @@ void count(unsigned long c) {
   }
 }
 
+//!< Transmit a bit (Manchester Encoding)
 void transmit_bit(byte data) {
-  // -- Manchester Encoding -- 
   if (data & 0x01) {
     // Transmit 1 (high->low)
     digitalWrite(COIL_PIN, HIGH);
@@ -82,11 +76,28 @@ void transmit_header() {
   transmit_bit(1);
   transmit_bit(1);
   transmit_bit(1);
+  
   transmit_bit(1);
   transmit_bit(1);
   transmit_bit(1);
   transmit_bit(1);
+  
   transmit_bit(1);
+}
+
+void transmit_payload() {
+  byte *p = payload;
+  
+  for(int row = 0; row < 10; row++) {
+    // Send next nibble
+    transmit_bit(p[0]);
+    transmit_bit(p[1]);
+    transmit_bit(p[2]);
+    transmit_bit(p[3]);
+    p += 4;
+    // Send checksum
+    transmit_bit(row_sums[row]);
+  }
 }
 
 void transmit_footer() {
@@ -97,20 +108,6 @@ void transmit_footer() {
   transmit_bit(0);
 }
 
-void transmit_payload() {
-  byte *p = payload;
-  
-  for(int row = 0; row < 10; row++) {
-    // Send next nibble
-    transmit_bit(*p++);
-    transmit_bit(*p++);
-    transmit_bit(*p++);
-    transmit_bit(*p++);
-    // Send checksum
-    transmit_bit(row_sums[row]);
-  }
-}
-
 void transmit_all() {
   transmit_header();
   transmit_payload();
@@ -118,17 +115,33 @@ void transmit_all() {
 }
 
 void set_payload_id(unsigned long id) {
-  // TODO - for each nibble in `id`, convert to hex and put in payload
+  for (int i = 0; i < 4*PAYLOAD_NIBBLES_ID; i++) {
+    payload[i] = (id>>i) & 0x01;
+  }
 }
 
 void set_payload_otp(uint8_t *otp) {
-  // TODO - for each nibble in `otp`, convert to hex and put in payload
+  byte nib;
+  byte *p = payload_otp;
+  
+  for(int n = 0; n < PAYLOAD_NIBBLES_OTP; n++) {
+    nib = otp[n/2];
+    if (!(n%2)) nib >>= 4;
+    nib &= 0x0F;
+    
+    // Store nibble in payload
+    p[0] = nib>>3 & 0x01;
+    p[1] = nib>>2 & 0x01;
+    p[2] = nib>>1 & 0x01;
+    p[3] = nib & 0x01;
+    p += 4;
+  }
 }
 
 void calculate_row_sums() {
   // Take the sum of each nibble of payload (i.e. "row")
   byte *row = payload;
-  for (short i = 0; i < 10; i++) {
+  for (int i = 0; i < 10; i++) {
     row_sums[i] = row[0] ^ row[1] ^ row[2] ^ row[3];
     row += 4;
   }
@@ -137,7 +150,7 @@ void calculate_row_sums() {
 void calculate_col_sums() {
   // Take the sum of each bit in each nibble of payload (i.e. "col")
   byte *p = payload;
-  for (short i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     col_sums[i] = p[0] ^ p[4] ^ p[8] ^ p[12] ^ p[16] ^ p[20] ^ p[24] ^ p[28] ^ p[32] ^ p[36];
     p++;
   }
@@ -147,7 +160,7 @@ void setup() {
   unsigned long c;
   uint8_t *hash = NULL;
 
-  // Grab nonce (counter, time, etc.)
+  // Get counter
   c = count();
 
   // Compute token
@@ -163,11 +176,11 @@ void setup() {
   calculate_row_sums();
   calculate_col_sums();
   
-  // Update EEPROM
+  // Update counter
   count(++c);
 }
 
 void loop() {
-  // Transmit data indefinitely
+  // Transmit indefinitely
   transmit_all();
 }
