@@ -122,7 +122,7 @@ void set_payload_id(unsigned long id) {
   byte *p = payload_id + (4*PAYLOAD_NIBBLES_ID-1);
   for (int i = 0; i < 4*PAYLOAD_NIBBLES_ID; i++) {
     *p = (id>>i) & 0x01;
-    p--; // FIXME -- this shouldn't decrement by a byte every bit
+    p--;
   }
 }
 
