@@ -25,8 +25,17 @@
 #define PAYLOAD_NIBBLES_ID  3 //!< budget for ID in payload
 #define PAYLOAD_NIBBLES_OTP 7 //!< budget for OTP in payload (<= 8)
 
-#define COIL_PIN 3 //!< Pin used to drive the coil
-#define BIT_DELAY 128 //!< delay between each transistion in microseconds (Manchester encoding)
+/*
+ On attiny85's pins (http://tronixstuff.wordpress.com/2011/11/23/using-an-attiny-as-an-arduino/):
+   - digital pin zero is physical pin five (also PWM)
+   - digital pin one is physical pin six (also PWM)
+   - analogue input two is physical pin seven
+   - analogue input three is physical pin two
+   - analogue input four is physical pin three
+*/
+
+#define COIL_PIN 0    //!< Pin used to drive the coil
+#define BIT_DELAY 256 //!< delay between each transistion in microseconds (Manchester encoding), 64 cycles-per-bit
 
 // TODO store bits as bits, not bytes
 byte payload[40] = { 0 }; //!< data payload (D00-39) where D00-D03 is /not/ considered special
@@ -165,17 +174,21 @@ void calculate_col_sums() {
 
 void setup() {
   unsigned long c;
-  uint8_t *hash = NULL;
-
+  //uint8_t *hash = NULL;
+  uint8_t hash[4] = { 0xFF };
+  
   // Get counter
   c = count();
 
+  /*
   // Compute token
   Sha1.initHmac((const uint8_t*) F(OTP_KEY), OTP_KEY_LENGTH);
   Sha1.print(OTP_ID);
   Sha1.print(c);
   hash = Sha1.resultHmac();
   hash += hash[HASH_LENGTH-1] & 0x0F;
+  */
+  
   
   // Prepare payload
   set_payload_id(OTP_ID);
