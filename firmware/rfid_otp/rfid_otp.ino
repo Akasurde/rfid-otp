@@ -174,21 +174,17 @@ void calculate_col_sums() {
 
 void setup() {
   unsigned long c;
-  //uint8_t *hash = NULL;
-  uint8_t hash[4] = { 0xFF };
+  uint8_t *hash = NULL;
   
   // Get counter
   c = count();
 
-  /*
   // Compute token
   Sha1.initHmac((const uint8_t*) F(OTP_KEY), OTP_KEY_LENGTH);
-  Sha1.print(OTP_ID);
+  Sha1.print((uint16_t) OTP_ID);
   Sha1.print(c);
   hash = Sha1.resultHmac();
   hash += hash[HASH_LENGTH-1] & 0x0F;
-  */
-  
   
   // Prepare payload
   set_payload_id(OTP_ID);
